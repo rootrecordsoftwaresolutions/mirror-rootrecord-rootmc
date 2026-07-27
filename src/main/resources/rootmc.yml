@@ -1,0 +1,184 @@
+# RootMC / RootMC — account link, McMMO, economy, in-game capture, app heartbeat
+# File: plugins/RootMC/rootmc.yml
+# Shared server credentials: plugins/RootMC/cloud.yml
+# Docs: https://rootmc.net/wiki/player/
+
+cloud:
+  heartbeat-interval-minutes: 5
+  # Full economy/towny cloud push once per Minecraft day (~30 min). Shop edits still push immediately.
+  sync-on-mc-day: true
+  mc-day-ticks: 24000
+  day-world: ""
+  sync-interval-minutes: 5
+  stats-url-base: "https://rootmc.net/player"
+
+# Heartbeat jar pulls (plugin_updates). Auto-restart only in the least-active (maintenance) window.
+plugin-updates:
+  restart-in-maintenance: true
+  restart-delay-seconds: 30
+
+# One real-world 30 minutes = one MC day. HH:00 HST = in-game noon; HH:15 HST = in-game midnight (day rollover).
+# Growth: random tick speed + bone meal/bees/farmer scaling in rootmc jar; spigot.yml modifiers ~67.
+minecraft-day:
+  enabled: true
+  timezone: "Pacific/Honolulu"
+  length-minutes: 20
+  midday-minute: 0
+  midnight-minute: 15
+
+server:
+  # Set on live host only — not published on wiki/API until launch
+  address: ""
+  default-world-name: "RootMC"
+  game-version: "26.2"
+  map-url: "https://map.rootmc.net/"
+
+mysql:
+  # Leave host/database/username blank so plugins/RootMC/database.yml wins (do not bake per-host DB here).
+  enabled: true
+  host: ""
+  port: 3306
+  database: ""
+  username: ""
+  password: ""
+  table-prefix: "root_"
+  pool-size: 5
+  jdbc-params: "verifyServerCertificate=false&useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=utf-8&serverTimezone=UTC"
+
+mcmmo:
+  enabled: true
+  table-prefix: "mcmmo_"
+
+economy:
+  enabled: true
+  # Incremental mode (default): shops → MySQL + per-listing D1; balances/playtime from MySQL on 5-min sync or Worker cron.
+  # Set legacy-bulk-sync: true only to roll back to full chest-scan snapshot push.
+  legacy-bulk-sync: false
+  # When true (after Cloudflare Hyperdrive is wired), Worker cron owns balances/playtime/treasury D1 — server skips them.
+  mysql-pull-authoritative: false
+  # Sync player G balances to cloud (uses Root Essentials; Vault Economy optional if registered).
+  vault-enabled: true
+  shop-provider: auto
+  shop-providers-priority:
+    - rootmc-shops
+    - quickshop
+    - chestshop
+    - sign
+  scan-signs: true
+  scan-chests: false
+  max-chunks-per-sync: 16
+  # Mint-peg scan for physical gold in player storage (inventory, ender, shops, loaded chests).
+  physical-gold-scan:
+    enabled: true
+    interval-minutes: 30
+    max-shops-per-scan: 48
+  enforce-price-cap: true
+  max-price-percent-over-avg: 10
+  # Piglin / zombified piglin farms bypass shops and mint gold into the economy.
+  piglin-drops:
+    enabled: true
+
+# Treasury mechanics (anchor account towny-server — see root-economy.yml tax rate).
+treasury:
+  death:
+    enabled: true
+    pvp-only: false
+    victim-balance-percent: 0.15    # 15% of victim balance on death (min min-fee-g)
+    treasury-share-of-fee: 0.40     # PvP: 40% of fee → reserve, 60% → killer; mob/env: 100% → reserve
+    min-fee-g: 1.0                  # at least 1 G per death when balance allows
+    notify-global: true             # append fee breakdown to the global death message
+    notify-victim: true             # private victim line (only when notify-global: false)
+    notify-killer: true             # private killer bounty line (only when notify-global: false)
+    # Set Towny economy.death.price_death to 0 when enabled (avoid double charge).
+
+public-reachout:
+  enabled: true
+  relay-to-discord: true
+  hourly-announcer: true
+  # Prefixed ::tax:: by PublicReachoutService for catalog Tag = Tax
+  hourly-summary: "{dynamic_tax_pct}% · {grant_count} grants · {vote_count} votes · Discord {discord_count}"
+  immediate:
+    discord_activity: true
+    discord_first_message: true
+    discord_link: true
+    vote_milestone: true
+    vote: true
+
+ingame:
+  enabled: true
+  max-pending-events: 64
+
+# Direct bidirectional bridge to the shared RootMC Discord channel.
+discord-chat:
+  enabled: true
+  server-tag: T
+  # Used only when discord.roles.linked in cloud.yml is blank.
+  allowed-role-id: ""
+  relay-chat: true
+  relay-join: true
+  relay-leave: true
+  relay-death: true
+  relay-reachout: true
+  inbound-format: "&8▎ &9Discord&8│ &f{user}&8 &7»&f {message}"
+
+cross-server-chat:
+  enabled: false
+  tag: T
+  # peer = Claims↔Towny MySQL (default). cloud = Cloudflare HTTP bridge.
+  transport: peer
+  api-base: https://api.rootmc.net
+  poll-interval-seconds: 2
+  heartbeat-seconds: 10
+  format: "&8[&b{tag}&8] &f{user}&7: &f{message}"
+  peer-online: "&a{label} is back online, use /{cmd} to join."
+  peer-offline: "&8[&b{tag}&8] &e{label} is going offline."
+
+messages:
+  prefix: ""
+  join: "&e{player} joined this world."
+  customize-join: true
+  heartbeat-ok: "&aCloud heartbeat sent."
+  status: "&7RootMC &f{version}&7 — API &f{api}&7 — world &f{world}"
+  link-started: "&aVerification code: &f{code}&a — open &f{url}&a (expires in 15 min)"
+  link-app-code: "&aApp sign-in code: &e{code}&a — enter in the RootMC app &7(expires in 15 min)"
+  link-already: "&aYour account is linked to RootMC (&f{account}&a)."
+  link-not: "&eYou are not linked. Run &f/link &7to verify."
+  link-success-sync: "&aAccount linked! Syncing profile…"
+  stats-link: "&7Public stats: &b{url}"
+  map-header: "&7RootMC live map &8— &7click to open in your browser:"
+  sync-done: "&aSynced &f{count}&a player profile(s) from RootMC cloud."
+  sync-fail: "&cCloud sync failed: &f{error}"
+  no-permission: "&cYou don't have permission."
+  mysql-disabled: "&cMySQL is disabled in config — local cache unavailable."
+  config-missing: "&cRootMC cloud credentials missing — edit plugins/RootMC/cloud.yml"
+  shop-price-too-high: "&cShop price &f{price}&c for &f{item}&c exceeds the server cap (&f{max}&c, avg &f{avg}&c)."
+  shops-link: "&7Root Shops: &b{url}"
+  waypoint-saved: "&aWaypoint saved: &f{label}&a (&7{x}&a, &7{y}&a, &7{z}&a)."
+  note-saved: "&aNote saved at your location."
+  ingame-not-linked: "&eLink your account first: &f/link"
+  vault-claimed: "&aClaimed &f{count}&a vault item(s)."
+  discord-activity-reward-broadcast: "&7{player} was active on discord within the last 12 hours and earned &f{gold}g"
+  discord-link-bonus: "&aDiscord link bonus: &f+{gold} G&a from the server treasury."
+  discord-linked-welcome: "&aDiscord linked! &7Your &f100 G&7 link bonus is being sent from the server treasury."
+  reachout-default: "&7{player} received &f{gold} G&7 from the server treasury."
+  reachout-discord-activity: "&7{player} was active on Discord within the last 12 hours and earned &f{gold} G&7."
+  reachout-discord-link: "&7{player} linked Discord and received &f{gold} G&7 from the treasury."
+  reachout-discord-first-message: "&7{player} sent their first Discord message and earned &f{gold} G&7."
+  death-fee-victim: "&cDeath fee: &f-{fee} {currency}&7 (&6{treasury} {currency} &7→ Server Reserve&7)"
+  death-fee-victim-pvp-suffix: "&7 · &f{killer_amount} {currency} &7→ &f{killer}&7."
+  death-fee-global: "&7· &cDeath fee &f{fee} {currency}&7 (&6{treasury} {currency}&7 → reserve{pvp_suffix}&7)"
+  death-fee-global-pvp-suffix: "&7 · &f{killer_amount} {currency}&7 → &f{killer}"
+  death-fee-killer: "&aPvP kill bounty: &f+{amount} {currency} &7from &f{victim}&7 (&6{treasury} {currency} &7→ reserve)."
+  value-line: "&7{item}&7 — &f{each}&7 each · &f{stack}&7 per stack (&7{size}&7) · &7{samples}&7 samples"
+  value-not-found: "&eNo market price for &f{item}&e. Try &fdiamond&7 or &foak_log&e."
+  value-hand-none: "&7In hand: &8(empty) &7— hold an item or use &f/value <item>"
+  value-hand: "&7In hand: &f{item}&7 ×{qty} — &f{each}&7 each · &f{stack}&7 per stack (&7{size}&7)"
+  value-carry-total: "&7Carried market value: &a{total}&7 (&f{stacks}&7 priced items, &f{items}&7 types)"
+  value-carry-line: "&8  &7{item}&7 ×{qty} — &f{each}&7 each → &f{total}"
+  value-carry-more: "&8  &7…and {count} more types (&f{total}&7)"
+  value-carry-empty: "&7No priced items in your inventory."
+  data-relay-connected: "&aServer Data Relay connected to &f{username}&a's Node."
+  data-relay-connected-anon: "&aServer Data Relay connected to a Node."
+  data-relay-fallback: "&eNo nodes are running, fallback servers Connected"
+  hq-node-connected: "&aServer Data Relay connected to &f{username}&a's Node."
+  hq-node-disconnected: "&eNo nodes are running, fallback servers Connected"
