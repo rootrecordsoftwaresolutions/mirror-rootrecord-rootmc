@@ -5,7 +5,7 @@ RootMC â€” account linking, McMMO sync, in-game capture, Root Shops economy
 | Field | Value |
 |-------|-------|
 | **Folder / artifact** | `rootmc` |
-| **Version** | `1.7.2` |
+| **Version** | `1.7.17` |
 | **Bukkit name** | `RootMC` |
 | **Paper API** | `26.1` |
 | **Author** | Root Record |
@@ -22,7 +22,7 @@ When the BuiltByBit product is live, this section will link directly to the paid
 
 ## Install
 
-1. Purchase / download `rootmc-1.7.2.jar` from BuiltByBit (coming soon) or your licensed RootMC distribution channel.
+1. Purchase / download `rootmc-1.7.17.jar` from BuiltByBit (coming soon) or your licensed RootMC distribution channel.
 2. Install **[Root-Core](https://github.com/RootRecord/root-core)** first when required (license/cloud spine for the suite).
 3. Remove any older `rootmc-*.jar` from `plugins/`.
 4. Drop the new jar into `plugins/` and restart (or use Root-Core suite updater when this plugin is on your licensed manifest).
@@ -33,7 +33,7 @@ When the BuiltByBit product is live, this section will link directly to the paid
 | Type | Plugins |
 |------|---------|
 | Hard depend | _none_ |
-| Soft depend | PlaceholderAPI, Vault, ChestShop, QuickShop, Root-ChestShops, RootMC-Shops, Towny, Root-Economy, Root-Essentials |
+| Soft depend | Root-Core, Root-Discord, PlaceholderAPI, Vault, ChestShop, QuickShop, Root-ChestShops, RootMC-Shops, Towny, Root-Economy, Root-Essentials |
 
 ## Configuration
 

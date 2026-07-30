@@ -24,6 +24,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -159,6 +160,8 @@ public final class CrossServerChatBridge implements Listener {
         presencePrimed = false;
         peerStatus.clear();
         Bukkit.getPluginManager().registerEvents(this, plugin);
+        // Prime cursor immediately (even with 0 players) so a cold last-id cannot dump history.
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, this::primeChatSafe);
         long pollTicks = pollIntervalSeconds * 20L;
         pollTask = plugin.getServer().getScheduler().runTaskTimerAsynchronously(
                 plugin, this::pollSafe, pollTicks, pollTicks);
@@ -332,15 +335,35 @@ public final class CrossServerChatBridge implements Listener {
         }
     }
 
+    private void primeChatSafe() {
+        if (!enabled || chatPrimed) {
+            return;
+        }
+        try {
+            if (peerChat != null) {
+                lastId = Math.max(lastId, peerChat.seekToEnd());
+                chatPrimed = true;
+                saveState();
+                plugin.getLogger().info(
+                        "Cross-server chat primed at last-id=" + lastId + " (skipped backlog).");
+                return;
+            }
+            // Cloud: one prime poll (API returns newest id, no message bodies when prime=1).
+            pollChat();
+        } catch (Exception ex) {
+            plugin.getLogger().log(Level.WARNING, "Cross-chat prime failed: " + ex.getMessage());
+        }
+    }
+
     private void pollSafe() {
         if (!enabled) {
             return;
         }
         try {
             pollPresence();
-            if (!plugin.getServer().getOnlinePlayers().isEmpty()) {
-                pollChat();
-            }
+            // Always advance the cursor — even with 0 players. Skipping poll while empty
+            // freezes last-id, then the first Claims login dumps peer backlog at once.
+            pollChat();
             saveState();
         } catch (Exception ex) {
             plugin.getLogger().log(Level.WARNING, "Cross-chat poll failed: " + ex.getMessage());
@@ -350,18 +373,37 @@ public final class CrossServerChatBridge implements Listener {
     private void pollChat() throws IOException, InterruptedException {
         if (peerChat != null) {
             try {
+                // First poll after boot: jump to MAX(id) — never stream backlog in 100-row chunks.
+                if (!chatPrimed) {
+                    lastId = Math.max(lastId, peerChat.seekToEnd());
+                    chatPrimed = true;
+                    saveState();
+                    plugin.getLogger().info(
+                            "Cross-server chat primed at last-id=" + lastId + " (skipped backlog).");
+                    return;
+                }
                 List<PeerMysqlCrossChat.ChatRow> rows = peerChat.poll();
                 lastId = Math.max(lastId, peerChat.lastId());
-                chatPrimed = true;
                 if (rows.isEmpty()) {
                     return;
                 }
+                // Cursor already advanced; only show lines when someone is online.
+                if (plugin.getServer().getOnlinePlayers().isEmpty()) {
+                    return;
+                }
+                Instant cutoff = Instant.now().minusSeconds(45);
                 List<String> lines = new ArrayList<>();
                 for (PeerMysqlCrossChat.ChatRow row : rows) {
+                    if (row.at() != null && row.at().isBefore(cutoff)) {
+                        continue;
+                    }
                     lines.add(format
                             .replace("{tag}", displayTag(row.tag()))
                             .replace("{user}", row.username())
                             .replace("{message}", row.message()));
+                }
+                if (lines.isEmpty()) {
+                    return;
                 }
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     for (String line : lines) {
@@ -391,7 +433,16 @@ public final class CrossServerChatBridge implements Listener {
         if (newest.find()) {
             lastId = Math.max(lastId, Long.parseLong(newest.group(1)));
         }
+        boolean wasPrime = !chatPrimed;
         chatPrimed = true;
+        if (wasPrime || plugin.getServer().getOnlinePlayers().isEmpty()) {
+            // Prime (or empty server): advance cursor only — never dump bodies.
+            Matcher advance = MSG_OBJ.matcher(json);
+            while (advance.find()) {
+                lastId = Math.max(lastId, Long.parseLong(advance.group(1)));
+            }
+            return;
+        }
         List<String> lines = new ArrayList<>();
         Matcher msg = MSG_OBJ.matcher(json);
         while (msg.find()) {

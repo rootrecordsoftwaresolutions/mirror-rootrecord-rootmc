@@ -61,6 +61,9 @@ public final class CloudApiClient {
             return LinkStatus.unlinked();
         }
         boolean discordLinked = json.contains("\"discord_linked\":true");
+        boolean proUnlocked = json.contains("\"pro_unlocked\":true");
+        boolean lifeMember = json.contains("\"life_member\":true");
+        boolean topActivePlayer = json.contains("\"top_active_player\":true");
         return new LinkStatus(
                 true,
                 discordLinked,
@@ -68,7 +71,10 @@ public final class CloudApiClient {
                 extractString(json, "email"),
                 extractString(json, "minecraft_username"),
                 extractString(json, "verified_at"),
-                extractString(json, "discord_user_id"));
+                extractString(json, "discord_user_id"),
+                proUnlocked,
+                lifeMember,
+                topActivePlayer);
     }
 
     public GovernanceVotingPower fetchGovernanceVotingPower(String uuid) throws IOException, InterruptedException {
@@ -346,6 +352,14 @@ public final class CloudApiClient {
         return VaultClaimResult.parse(json);
     }
 
+    /** Redeem a tradeable Pro voucher (one_month / lifetime). Returns raw JSON. */
+    public String redeemProVoucher(String minecraftUuid, String voucherId)
+            throws IOException, InterruptedException {
+        String body = "{\"minecraft_uuid\":\"" + escapeJson(minecraftUuid)
+                + "\",\"voucher_id\":\"" + escapeJson(voucherId) + "\"}";
+        return post("/api/realm/minecraft/memberships/redeem-voucher", body);
+    }
+
     public record GoldTransfer(
             String id,
             String fromUuid,
@@ -476,7 +490,7 @@ public final class CloudApiClient {
     }
 
     public record VaultClaimResult(List<VaultItem> items) {
-        public record VaultItem(String itemKey, int quantity) {}
+        public record VaultItem(String itemKey, int quantity, String voucherId, String voucherTier) {}
 
         static VaultClaimResult parse(String json) {
             List<VaultItem> items = new ArrayList<>();
@@ -486,12 +500,18 @@ public final class CloudApiClient {
                 if (keyStart < 0) {
                     break;
                 }
-                String slice = json.substring(keyStart, Math.min(json.length(), keyStart + 120));
+                String slice = json.substring(keyStart, Math.min(json.length(), keyStart + 280));
                 String itemKey = extractString(slice, "item_key");
                 String qtyStr = extractString(slice, "quantity");
+                String voucherId = extractString(slice, "voucher_id");
+                String voucherTier = extractString(slice, "voucher_tier");
                 if (itemKey != null && qtyStr != null) {
                     try {
-                        items.add(new VaultItem(itemKey, Integer.parseInt(qtyStr)));
+                        items.add(new VaultItem(
+                                itemKey,
+                                Integer.parseInt(qtyStr),
+                                voucherId,
+                                voucherTier));
                     } catch (NumberFormatException ignored) {
                         /* skip malformed */
                     }
@@ -963,23 +983,20 @@ public final class CloudApiClient {
 
     private String exchange(String method, String path, String jsonBody, boolean authorized)
             throws IOException, InterruptedException {
-        String primary = com.rootrecord.minecraft.common.config.RootMcApiBases.normalize(config.apiBase());
-        // Production Worker is on free-tier 1027; always prefer local edge when configured for production.
-        if (primary.equalsIgnoreCase(com.rootrecord.minecraft.common.config.RootMcApiBases.PRODUCTION)) {
-            return exchangeOnce(
-                    com.rootrecord.minecraft.common.config.RootMcApiBases.LOCAL_EDGE,
-                    method,
-                    path,
-                    jsonBody,
-                    authorized);
-        }
+        String configured = com.rootrecord.minecraft.common.config.RootMcApiBases.normalize(config.apiBase());
+        String preferred = com.rootrecord.minecraft.common.config.RootMcApiBases.preferredBase(configured);
         try {
-            return exchangeOnce(primary, method, path, jsonBody, authorized);
+            return exchangeOnce(preferred, method, path, jsonBody, authorized);
         } catch (IOException first) {
-            String alt = com.rootrecord.minecraft.common.config.RootMcApiBases.alternateAfterThrottle(primary);
-            if (alt == null
-                    || !com.rootrecord.minecraft.common.config.RootMcApiBases.looksLikeThrottleMessage(
-                            first.getMessage())) {
+            String alt = com.rootrecord.minecraft.common.config.RootMcApiBases.fallbackBase(preferred);
+            if (alt == null || alt.equalsIgnoreCase(preferred)) {
+                throw first;
+            }
+            boolean retry = com.rootrecord.minecraft.common.config.RootMcApiBases.looksLikeThrottleMessage(
+                            first.getMessage())
+                    || com.rootrecord.minecraft.common.config.RootMcApiBases.looksLikeEdgeDownMessage(
+                            first.getMessage());
+            if (!retry) {
                 throw first;
             }
             return exchangeOnce(alt, method, path, jsonBody, authorized);
@@ -1034,9 +1051,12 @@ public final class CloudApiClient {
             String email,
             String minecraftUsername,
             String verifiedAt,
-            String discordUserId) {
+            String discordUserId,
+            boolean proUnlocked,
+            boolean lifeMember,
+            boolean topActivePlayer) {
         static LinkStatus unlinked() {
-            return new LinkStatus(false, false, null, null, null, null, null);
+            return new LinkStatus(false, false, null, null, null, null, null, false, false, false);
         }
 
         /** Player-facing label — never show raw account UUID. */

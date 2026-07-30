@@ -4,13 +4,11 @@ import com.rootrecord.minecraft.rootmc.reachout.PublicReachoutService;
 import com.rootrecord.minecraft.rootmc.cloud.CloudHeartbeatClient;
 import com.rootrecord.minecraft.rootmc.cloud.ConnectionPreferenceService;
 import com.rootrecord.minecraft.rootmc.metrics.HostMetricsMinuteTask;
+import com.rootrecord.minecraft.common.RootDiscordSupport;
 import com.rootrecord.minecraft.common.RootMcPublicReachout;
 import com.rootrecord.minecraft.rootmc.economy.PiglinDropListener;
 import com.rootrecord.minecraft.rootmc.treasury.DeathTreasuryListener;
-import com.rootrecord.minecraft.rootmc.discord.DiscordChatBridge;
-import com.rootrecord.minecraft.rootmc.discord.DiscordChatConfig;
 import com.rootrecord.minecraft.rootmc.discord.CrossServerChatBridge;
-import com.rootrecord.minecraft.rootmc.discord.DiscordChatConfig;
 import com.rootrecord.minecraft.rootmc.ingame.IngameEventBuffer;
 import com.rootrecord.minecraft.rootmc.ingame.RootMcCommand;
 import com.rootrecord.minecraft.rootmc.listener.PlaceholderApiHookListener;
@@ -44,6 +42,7 @@ import com.rootrecord.minecraft.rootstat.mysql.RootShopsStore;
 import com.rootrecord.minecraft.rootstat.sync.McDayBedListener;
 import com.rootrecord.minecraft.rootstat.sync.PhysicalGoldScanTask;
 import com.rootrecord.minecraft.rootstat.sync.SyncTask;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -124,8 +123,6 @@ public final class RootMcPlugin extends JavaPlugin implements RootStatBridge, Ro
     private HeartbeatTask heartbeatTask;
     private PluginUpdateService updateService;
     private IngameEventBuffer ingameEvents;
-    private DiscordChatBridge discordChatBridge;
-    private DiscordChatConfig discordChatConfig;
     private CrossServerChatBridge crossServerChatBridge;
     private PublicReachoutService publicReachoutService;
     private GovernancePowerCacheService governancePowerCache;
@@ -139,6 +136,7 @@ public final class RootMcPlugin extends JavaPlugin implements RootStatBridge, Ro
         yamlConfig = new RootRecordYamlConfig(this, CONFIG_FILE, CONFIG_FILE);
         yamlConfig.load();
         reloadLocalConfig();
+        RootDiscordSupport.warnIfMissing(this, "public reachout and Discord chat relay");
 
         if (!rootStatConfig.hasServerCredentials()) {
             getLogger().warning(
@@ -200,10 +198,6 @@ public final class RootMcPlugin extends JavaPlugin implements RootStatBridge, Ro
             connectionPreference.stop();
             connectionPreference = null;
         }
-        if (discordChatBridge != null) {
-            discordChatBridge.stop();
-            discordChatBridge = null;
-        }
         if (crossServerChatBridge != null) {
             crossServerChatBridge.stop();
             crossServerChatBridge = null;
@@ -262,10 +256,6 @@ public final class RootMcPlugin extends JavaPlugin implements RootStatBridge, Ro
 
     public PublicReachoutService publicReachout() {
         return publicReachoutService;
-    }
-
-    public DiscordChatBridge discordChatBridge() {
-        return discordChatBridge;
     }
 
     public String rawMsg(String key) {
@@ -436,7 +426,25 @@ public final class RootMcPlugin extends JavaPlugin implements RootStatBridge, Ro
             return;
         }
         int delivered = 0;
+        var voucherSvc = Bukkit.getServicesManager().getRegistration(
+                com.rootrecord.minecraft.common.RootMcProVoucherService.class);
         for (CloudApiClient.VaultClaimResult.VaultItem item : result.items()) {
+            String key = item.itemKey() == null ? "" : item.itemKey().trim().toUpperCase(java.util.Locale.ROOT);
+            if ((key.equals("PRO_VOUCHER_MONTH") || key.equals("PRO_VOUCHER_LIFE"))
+                    && voucherSvc != null && voucherSvc.getProvider() != null) {
+                String tier = item.voucherTier() != null && !item.voucherTier().isBlank()
+                        ? item.voucherTier()
+                        : (key.equals("PRO_VOUCHER_LIFE") ? "lifetime" : "one_month");
+                String vid = item.voucherId() != null ? item.voucherId() : java.util.UUID.randomUUID().toString();
+                ItemStack give = voucherSvc.getProvider().createVoucher(tier, vid);
+                var leftover = player.getInventory().addItem(give);
+                if (!leftover.isEmpty()) {
+                    leftover.values().forEach(stackItem ->
+                            player.getWorld().dropItemNaturally(player.getLocation(), stackItem));
+                }
+                delivered += 1;
+                continue;
+            }
             Material mat = Material.matchMaterial(item.itemKey());
             if (mat == null || mat.isAir()) {
                 continue;
@@ -499,7 +507,6 @@ public final class RootMcPlugin extends JavaPlugin implements RootStatBridge, Ro
         yamlConfig.reload();
         rootMcConfig = RootMcConfig.from(this, yamlConfig.config());
         rootStatConfig = RootStatConfig.from(this, yamlConfig.config());
-        discordChatConfig = DiscordChatConfig.from(this, yamlConfig.config());
         if (cloudApi != null) {
             cloudApi.updateConfig(rootStatConfig);
         }
@@ -512,23 +519,7 @@ public final class RootMcPlugin extends JavaPlugin implements RootStatBridge, Ro
         if (publicReachoutService != null) {
             publicReachoutService.reloadFromConfig();
         }
-        startDiscordChatBridge();
         startCrossServerChatBridge();
-    }
-
-    private void startDiscordChatBridge() {
-        if (discordChatBridge != null) {
-            discordChatBridge.stop();
-            discordChatBridge = null;
-        }
-        if (discordChatConfig == null) {
-            discordChatConfig = DiscordChatConfig.from(this, yamlConfig.config());
-        }
-        if (!discordChatConfig.enabled()) {
-            return;
-        }
-        discordChatBridge = new DiscordChatBridge(this, discordChatConfig);
-        discordChatBridge.start();
     }
 
     private void startCrossServerChatBridge() {

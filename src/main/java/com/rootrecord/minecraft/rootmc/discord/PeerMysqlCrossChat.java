@@ -145,11 +145,31 @@ public final class PeerMysqlCrossChat {
         return out;
     }
 
+    /**
+     * Pull peer rows, then jump {@code lastId} to {@code MAX(id)} so a cold cursor
+     * (last-id=0) cannot stream days of history 100 rows at a time.
+     */
+    public long seekToEnd() throws Exception {
+        pullPeerIntoLocal();
+        try (Connection c = DriverManager.getConnection(localJdbc, localUser, localPass);
+                PreparedStatement ps = c.prepareStatement(
+                        "SELECT COALESCE(MAX(id), 0) FROM " + localTable);
+                ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                lastId = Math.max(lastId, rs.getLong(1));
+            }
+        }
+        return lastId;
+    }
+
     private void pullPeerIntoLocal() throws Exception {
+        // Sync by peer id watermark via local lastId is done in poll/seekToEnd.
+        // Time window is a safety net only — prefer NOW() (session TZ) over UTC_TIMESTAMP()
+        // so DATETIME values written by JDBC Timestamp match the filter.
         try (Connection peer = DriverManager.getConnection(peerJdbc, peerUser, peerPass);
                 PreparedStatement ps = peer.prepareStatement(
                         "SELECT tag, username, message, created_at FROM " + peerTable
-                                + " WHERE created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY) ORDER BY id ASC LIMIT 200");
+                                + " WHERE created_at > (NOW() - INTERVAL 2 MINUTE) ORDER BY id ASC LIMIT 200");
                 ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 insertIgnore(

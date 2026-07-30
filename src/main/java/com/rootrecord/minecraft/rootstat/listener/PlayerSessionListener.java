@@ -53,16 +53,16 @@ public final class PlayerSessionListener implements Listener {
                                 status.verifiedAt(),
                                 java.time.Instant.now().toString()));
                     }
-                    if (status.discordLinked() && isRecentDiscordLink(status.verifiedAt())) {
-                        bridge.getPlugin().getServer().getScheduler().runTask(bridge.getPlugin(), () -> {
-                            if (!player.isOnline()) {
-                                return;
-                            }
+                    bridge.getPlugin().getServer().getScheduler().runTask(bridge.getPlugin(), () -> {
+                        if (!player.isOnline()) {
+                            return;
+                        }
+                        if (status.discordLinked() && isRecentDiscordLink(status.verifiedAt())) {
                             if (DiscordLinkWelcomeSessions.markWelcome(uuid)) {
                                 player.sendMessage(bridge.colorize(bridge.msg("discord-linked-welcome")));
                             }
-                        });
-                    }
+                        }
+                    });
                 } catch (Exception ignored) {
                     // join should not fail on cloud errors
                 }
@@ -93,16 +93,16 @@ public final class PlayerSessionListener implements Listener {
                             status.verifiedAt(),
                             java.time.Instant.now().toString()));
                 }
-                if (status.discordLinked() && isRecentDiscordLink(status.verifiedAt())) {
-                    bridge.getPlugin().getServer().getScheduler().runTask(bridge.getPlugin(), () -> {
-                        if (!player.isOnline()) {
-                            return;
-                        }
+                bridge.getPlugin().getServer().getScheduler().runTask(bridge.getPlugin(), () -> {
+                    if (!player.isOnline()) {
+                        return;
+                    }
+                    if (status.discordLinked() && isRecentDiscordLink(status.verifiedAt())) {
                         if (DiscordLinkWelcomeSessions.markWelcome(uuid)) {
                             player.sendMessage(bridge.colorize(bridge.msg("discord-linked-welcome")));
                         }
-                    });
-                }
+                    }
+                });
             } catch (Exception ignored) {
                 // join should not fail on cloud errors
             }

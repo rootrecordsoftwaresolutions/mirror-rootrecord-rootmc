@@ -1,10 +1,10 @@
 package com.rootrecord.minecraft.rootmc.reachout;
 
+import com.rootrecord.minecraft.common.RootDiscordApi;
 import com.rootrecord.minecraft.common.RootMcPublicReachout;
 import com.rootrecord.minecraft.common.RootMcTreasuryService;
 import com.rootrecord.minecraft.common.ShadedServiceBridge;
 import com.rootrecord.minecraft.rootmc.RootMcPlugin;
-import com.rootrecord.minecraft.rootmc.discord.DiscordChatBridge;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
 
@@ -125,11 +125,11 @@ public final class PublicReachoutService implements RootMcPublicReachout {
         if (!discordRelayEnabled) {
             return;
         }
-        DiscordChatBridge bridge = plugin.discordChatBridge();
-        if (bridge == null) {
+        RootDiscordApi discord = ShadedServiceBridge.resolveDiscord(plugin);
+        if (discord == null || !discord.isReady()) {
             return;
         }
-        bridge.relayReachout(
+        discord.postReachout(
                 username,
                 uuid == null ? "" : uuid.toString(),
                 plain,

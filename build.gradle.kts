@@ -2,7 +2,7 @@ plugins {
     java
 }
 
-version = "1.7.2"
+version = "1.7.17"
 
 repositories {
     mavenCentral()
@@ -13,10 +13,6 @@ repositories {
 dependencies {
     implementation("com.zaxxer:HikariCP:6.2.1")
     implementation("com.mysql:mysql-connector-j:9.2.0")
-    implementation("net.dv8tion:JDA:6.4.2") {
-        exclude(module = "opus-java")
-        exclude(module = "tink")
-    }
     compileOnly("com.github.MilkBowl:VaultAPI:1.7.1")
     compileOnly("me.clip:placeholderapi:2.11.6")
 }

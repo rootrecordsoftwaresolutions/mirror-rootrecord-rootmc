@@ -248,7 +248,10 @@ public final class RootStatCommand implements CommandExecutor, TabCompleter {
                         p.email(),
                         p.username(),
                         p.verifiedAt(),
-                        null);
+                        null,
+                        false,
+                        false,
+                        false);
             }
 
         }

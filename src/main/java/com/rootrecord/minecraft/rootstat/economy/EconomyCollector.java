@@ -399,9 +399,11 @@ public final class EconomyCollector {
             List<CloudApiClient.GoldTransfer> pending) {
         List<CloudApiClient.GoldTransferResult> results = new ArrayList<>();
         int applied = 0;
-        // Coalesce vote_backfill notices — one line per player per batch, not N spam lines.
+        // Coalesce vote_backfill + discord_activity — one notice per player per batch (total gold).
         java.util.Map<UUID, double[]> voteBackfillTotals = new java.util.HashMap<>();
         java.util.Map<UUID, String> voteBackfillNames = new java.util.HashMap<>();
+        java.util.Map<UUID, Double> discordActivityTotals = new java.util.HashMap<>();
+        java.util.Map<UUID, String> discordActivityNames = new java.util.HashMap<>();
         for (CloudApiClient.GoldTransfer transfer : pending) {
             UUID from = parseUuid(transfer.fromUuid());
             UUID to = parseUuid(transfer.toUuid());
@@ -431,13 +433,17 @@ public final class EconomyCollector {
             if (ok) {
                 applied++;
                 results.add(new CloudApiClient.GoldTransferResult(transfer.id(), "applied", null));
-                if ("vote_backfill".equals(transfer.source())) {
+                String source = transfer.source() == null ? "" : transfer.source().trim();
+                if ("vote_backfill".equals(source)) {
                     voteBackfillTotals.merge(to, new double[] {transfer.amount(), 1}, (a, b) -> {
                         a[0] += b[0];
                         a[1] += b[1];
                         return a;
                     });
                     voteBackfillNames.putIfAbsent(to, resolveRecipientName(to, transfer.toUsername()));
+                } else if ("discord_activity".equals(source)) {
+                    discordActivityTotals.merge(to, transfer.amount(), Double::sum);
+                    discordActivityNames.putIfAbsent(to, resolveRecipientName(to, transfer.toUsername()));
                 } else {
                     notifyTreasuryTransferApplied(transfer, to);
                 }
@@ -452,6 +458,10 @@ public final class EconomyCollector {
             int count = (int) entry.getValue()[1];
             String name = voteBackfillNames.getOrDefault(to, "Player");
             notifyVoteBackfillBatch(to, name, gold, count);
+        }
+        for (var entry : discordActivityTotals.entrySet()) {
+            UUID to = entry.getKey();
+            notifyDiscordActivityBatch(to, discordActivityNames.getOrDefault(to, "Player"), entry.getValue());
         }
         try {
             cloud.completeGoldTransfers(results);
@@ -476,6 +486,26 @@ public final class EconomyCollector {
         RootMcPublicReachout reachout = ShadedServiceBridge.resolvePublicReachout(bridge.getPlugin());
         if (reachout != null) {
             reachout.recordTreasuryOutflow("vote", name, to, gold, false);
+        }
+    }
+
+    /** One News line per player per apply batch — {gold} is the sum of stacked discord_activity rows. */
+    private void notifyDiscordActivityBatch(UUID to, String name, double gold) {
+        if (gold < 0.01) {
+            return;
+        }
+        Player player = Bukkit.getPlayer(to);
+        if (player == null || !DiscordActivityRewardSessions.markBroadcast(to)) {
+            return;
+        }
+        RootMcPublicReachout reachout = ShadedServiceBridge.resolvePublicReachout(bridge.getPlugin());
+        if (reachout != null) {
+            reachout.recordTreasuryOutflow("discord_activity", name, to, gold, true);
+        } else {
+            String line = bridge.msg("discord-activity-reward-broadcast")
+                    .replace("{player}", name)
+                    .replace("{gold}", formatGold(gold));
+            Bukkit.broadcastMessage(line);
         }
     }
 
@@ -504,17 +534,8 @@ public final class EconomyCollector {
             return;
         }
         if ("discord_activity".equals(source)) {
-            if (player == null || !DiscordActivityRewardSessions.markBroadcast(to)) {
-                return;
-            }
-            if (reachout != null) {
-                reachout.recordTreasuryOutflow("discord_activity", name, to, amount, true);
-            } else {
-                String line = bridge.msg("discord-activity-reward-broadcast")
-                        .replace("{player}", name)
-                        .replace("{gold}", formatGold(amount));
-                Bukkit.broadcastMessage(line);
-            }
+            // Batched in applyTransfersInternal → notifyDiscordActivityBatch.
+            notifyDiscordActivityBatch(to, name, amount);
             return;
         }
         if ("discord_first_message".equals(source)) {

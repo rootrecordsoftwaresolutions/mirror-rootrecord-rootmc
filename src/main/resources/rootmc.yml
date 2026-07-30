@@ -109,6 +109,8 @@ ingame:
   max-pending-events: 64
 
 # Direct bidirectional bridge to the shared RootMC Discord channel.
+# Legacy chat flags — preferred home is plugins/RootMC/root-discord.yml (Root-Discord plugin).
+# Root-Discord still reads these when its chat section is empty.
 discord-chat:
   enabled: true
   server-tag: T

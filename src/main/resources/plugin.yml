@@ -5,7 +5,7 @@ api-version: '26.1'
 description: RootMC — account linking, McMMO sync, in-game capture, Root Shops economy, app heartbeat.
 author: Root Record
 website: https://rootmc.net
-softdepend: [PlaceholderAPI, Vault, ChestShop, QuickShop, Root-ChestShops, RootMC-Shops, Towny, Root-Economy, Root-Essentials]
+softdepend: [Root-Core, Root-Discord, PlaceholderAPI, Vault, ChestShop, QuickShop, Root-ChestShops, RootMC-Shops, Towny, Root-Economy, Root-Essentials]
 loadafter: [Vault, Root-Economy, Root-Essentials, Root-ChestShops, RootMC-Shops]
 commands:
   link:
