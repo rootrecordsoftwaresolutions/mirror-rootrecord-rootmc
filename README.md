@@ -8,6 +8,6 @@
 > **Live Pacific:** [RootRecord-Pacific-Solar-Server](https://github.com/RootRecord-Software-Solutions/RootRecord-Pacific-Solar-Server)  
 > **Library:** [RootRecord-Library](https://github.com/RootRecord-Software-Solutions/RootRecord-Library)
 
-Mirror of `RootRecord/rootmc`. **Do not develop here.** Product track A (RootMC Paper).
+Mirror of `RootRecord/rootmc`. **Do not develop here.** Product track A (RootMC Paper / branding).
 
 *Transition banner 2026-09-28 HST.*
